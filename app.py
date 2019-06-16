@@ -5,6 +5,13 @@ from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
+# Get GPIO (which may fail when not running on a RPi).
+# If this fails, prefer to continue without it.
+try:
+  import RPi.GPIO as GPIO
+except RuntimeError:
+  GPIO = None
+
 import argparse
 import datetime
 import enum
@@ -33,6 +40,14 @@ class CalendarStatus(enum.Enum):
 
 # Terms that indicate away.
 AWAY_TERMS = ('wfh', 'ooo')
+
+# TODO(me): Fill this in!
+# Map CalendarStatus to output pin.
+OUTPUT_PINS = dict([
+  (CalendarStatus.AWAY, 0),
+  (CalendarStatus.BUSY, 0),
+  (CalendarStatus.FREE, 0),
+])
 
 # Parse all the command line arguments.
 def parse_args(*args):
@@ -133,8 +148,21 @@ def main(*args):
   creds = auth()
   cal = build('calendar', 'v3', credentials=creds)
 
-  # Calculate the status
-  print (status(cal, args.check_interval))
+  # Calculate the status.
+  cal_status = status(cal, args.check_interval)
+  print(cal_status)
+
+  if (GPIO is not None):
+    # Configure GPIO.
+    GPIO.setmode(GPIO.BOARD)
+    for pin in OUTPUT_PINS.values():
+      GPIO.setup(pin, GPIO.OUT)
+
+    # Output the status to the light.
+    for status_key, pin in OUTPUT_PINS.items():
+      GPIO.output(pin, status_key == cal_status)
+
+    GPIO.cleanup()
 
 
 if __name__ == '__main__':
