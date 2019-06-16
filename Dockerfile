@@ -17,14 +17,15 @@ ENV HOME /usr/src/app
 WORKDIR /usr/src/app
 
 # Get required modules.
+ENV PYTHONWARNINGS "ignore:Unverified HTTPS request"
 COPY requirements.txt requirements.txt
 RUN pip3 install --trusted-host pypi.python.org -r requirements.txt
 
 # Declare open ports.
-EXPOSE 80
+EXPOSE 80 8080
 
 # Copy everything from here to the container.
-COPY . .
+COPY app.py .
 
 # Start the application.
 ENTRYPOINT ["python3", "app.py"]
