@@ -1,16 +1,17 @@
 # app.py
 # 2019-06-15
 
-from googleapiclient.discovery import build
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-
 # Get GPIO (which may fail when not running on a RPi).
 # If this fails, prefer to continue without it.
 try:
   import RPi.GPIO as GPIO
 except RuntimeError:
   GPIO = None
+
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+import pytz
 
 import argparse
 import datetime
@@ -26,6 +27,7 @@ TOKEN = 'secret/token.pkl'
 CREDS = 'secret/credentials.json'
 SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/calendar.settings.readonly',
 ]
 
 # Runtime constants.
@@ -40,6 +42,8 @@ class CalendarStatus(enum.Enum):
 
 # Terms that indicate away.
 AWAY_TERMS = ('wfh', 'ooo')
+DAY_START = datetime.timedelta(hours = 10, minutes = 30)
+DAY_END = datetime.timedelta(hours = 18, minutes = 30)
 
 # TODO(me): Fill this in!
 # Map CalendarStatus to output pin.
@@ -49,6 +53,30 @@ OUTPUT_PINS = dict([
   (CalendarStatus.FREE, 0),
 ])
 
+
+# Parse the format for a simple time during the day.
+# This converts '12:34' -> timedelta(hours = 12, minutes = 34)
+class ParseTimeAction(argparse.Action):
+  def __call__(self, parser, namespace, string, option_string = None):
+    # Check there are only two components.
+    parts = [part.strip() for part in string.split(':')]
+    if (len(parts) != 2):
+      raise ValueError("Time is in a bad format: %s" % string)
+
+    # Check each component is a number.
+    if (not all([part.isdigit() for part in parts])):
+      raise ValueError("Time is in a bad format: %s" % string)
+
+    # Check both values are within time bounds (24h, 60m).
+    (hours, minutes) = tuple([int(part) for part in parts])
+    if (not 0 <= hours < 24 or not 0 <= minutes < 60):
+      raise ValueError("Time encodes incorrect offset: %s" % string)
+
+    # Store the value in a useable format.
+    value = datetime.timedelta(hours = hours, minutes = minutes)
+    setattr(namespace, self.dest, value)
+
+
 # Parse all the command line arguments.
 def parse_args(*args):
   parser = argparse.ArgumentParser(description='Calendar Status Light')
@@ -56,6 +84,13 @@ def parse_args(*args):
   parser.add_argument('--check_interval', type=int,
                       default=CHECK_INTERVAL_MINUTES,
                       help='How often to poll the calendar (in minutes)')
+
+  parser.add_argument('--day_start', type=str, required=True,
+                      action=ParseTimeAction,
+                      help='When the day starts, in "hh:mm" format')
+  parser.add_argument('--day_end', type=str, required=True,
+                      action=ParseTimeAction,
+                      help='When the day ends, in "hh:mm" format')
 
   return parser.parse_args()
 
@@ -99,15 +134,26 @@ def auth(creds):
   return creds
 
 
-def status(cal, check_interval):
-  # Query event list for today.
-  today = datetime.datetime.combine(datetime.date.today(), datetime.time())
-  delta = datetime.timedelta(days=1)
+def status(cal, check_interval, day_start, day_end):
+  # Get the user's timezone.
+  tzinfo = cal.settings().get(setting='timezone').execute()
+  tz = pytz.timezone(tzinfo.get('value', 'UTC'))
 
+  # Determine when it is based on the timezone.
+  now = datetime.datetime.now(tz = tz)
+  today = now.replace(hour = 0, minute = 0, second = 0, microsecond = 0)
+
+  # Check that the current time is between the given bounds.
+  if (now < today + day_start or today + day_end < now):
+    return CalendarStatus.AWAY
+
+  # Query event list for today.
+  delta = datetime.timedelta(days=1)
   body = {
       'calendarId': 'primary',
-      'timeMin': today.isoformat() + 'Z',
-      'timeMax': (today + delta).isoformat() + 'Z',
+      'timeMin': today.isoformat(),
+      'timeMax': (today + delta).isoformat(),
+      'timeZone': tz.zone,
     }
   resp = cal.events().list(**body).execute()
   for event in resp['items']:
@@ -119,14 +165,12 @@ def status(cal, check_interval):
           and 'dateTime' not in event['end']):
         return CalendarStatus.AWAY
 
-  # Query Free / Busy for the next 5m.
-  now = datetime.datetime.utcnow()
+  # Query Free / Busy for the next 5m on the primary calendar.
   delta = datetime.timedelta(minutes=check_interval)
-
-  # See if the primary calendar is busy right now.
   body = {
-      'timeMin': now.isoformat() + 'Z',
-      'timeMax': (now + delta).isoformat() + 'Z',
+      'timeMin': now.isoformat(),
+      'timeMax': (now + delta).isoformat(),
+      'timeZone': tz.zone,
       'items': [{
         'id': 'primary',
       }]
@@ -149,7 +193,7 @@ def main(*args):
   cal = build('calendar', 'v3', credentials=creds)
 
   # Calculate the status.
-  cal_status = status(cal, args.check_interval)
+  cal_status = status(cal, args.check_interval, args.day_start, args.day_end)
   print(cal_status)
 
   if (GPIO is not None):
