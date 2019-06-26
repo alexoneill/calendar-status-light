@@ -15,11 +15,14 @@ import pickle
 import signal
 
 
+# Directory where the script is.
+DIR = os.path.dirname(os.path.realpath(__file__))
+
 # Token storage.
-TOKEN = 'secret/token.pkl'
+TOKEN = os.path.join(DIR, 'secret/token.pkl')
 
 # Required Google Calendar authentication constants.
-CREDS = 'secret/credentials.json'
+CREDS = os.path.join(DIR, 'secret/credentials.json')
 SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/calendar.settings.readonly',
