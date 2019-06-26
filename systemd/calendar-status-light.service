@@ -1,7 +1,7 @@
 [Unit]
 Description=calendar-status-light Service.
 Wants=network-online.target
-After=network-online.target
+After=network-online.target calendar-status-light-update.service
 
 [Service]
 Type=simple

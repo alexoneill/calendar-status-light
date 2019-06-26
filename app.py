@@ -34,10 +34,10 @@ SCOPES = [
 CHECK_INTERVAL_SECONDS = 5
 
 # Deduced option for what the calendar status is.
-class CalendarStatus(enum.Enum):
-  AWAY = 1
+class CalendarStatus(enum.IntEnum):
+  FREE = 1
   BUSY = 2
-  FREE = 3
+  AWAY = 3
 
 # Terms that indicate away.
 IGNORE_TERMS = ('oncall',)
@@ -52,6 +52,9 @@ AWAY_PIN = "WPI0"
 BUSY_PIN = "WPI1"
 FREE_PIN = "WPI2"
 BUZZ_PIN = "WPI3"
+
+# Constant controlling initialization beep.
+BEEP_TIME = 0.5
 
 
 # Parse the format for a simple time during the day.
@@ -164,6 +167,7 @@ def status(cal, check_delta, day_start, day_end):
     return CalendarStatus.AWAY
 
   # Query event list for today.
+  cal_status = CalendarStatus.FREE
   delta = datetime.timedelta(days=1)
   body = {
       'calendarId': 'primary',
@@ -184,13 +188,13 @@ def status(cal, check_delta, day_start, day_end):
     # Check against away keywords.
     title = event['summary'].lower()
     if (check_keywords(title, AWAY_TERMS)):
-      return CalendarStatus.AWAY
+      cal_status = max(cal_status, CalendarStatus.AWAY)
 
     # Skip events with certain keywords.
     if (not check_keywords(title, IGNORE_TERMS)):
-      return CalendarStatus.BUSY
+      cal_status = max(cal_status, CalendarStatus.BUSY)
 
-  return CalendarStatus.FREE
+  return cal_status
 
 
 def stream(fn, *args, **kwargs):
@@ -213,7 +217,7 @@ def main(*args):
   cal = build('calendar', 'v3', credentials=creds)
 
   # Configure the stack.
-  buzz = gpiozero.LED(BUZZ_PIN)
+  buzz = gpiozero.Buzzer(BUZZ_PIN)
   stack = gpiozero.LEDBoard(
       AWAY_PIN,
       BUSY_PIN,
@@ -233,6 +237,9 @@ def main(*args):
   stack.source = (
       led_mapping[cal_status] for cal_status in
         stream(status, cal, check_delta, args.day_start, args.day_end))
+
+  # Beep the buzzer once to indicate boot.
+  buzz.beep(on_time = BEEP_TIME, n = 1)
 
   # Wait for a signal, then quit.
   print('Waiting for signal...')
