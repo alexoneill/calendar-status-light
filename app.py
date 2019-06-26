@@ -54,7 +54,7 @@ FREE_PIN = "WPI2"
 BUZZ_PIN = "WPI3"
 
 # Constant controlling initialization beep.
-BEEP_TIME = 0.5
+BEEP_TIME = 0.2
 
 
 # Parse the format for a simple time during the day.
