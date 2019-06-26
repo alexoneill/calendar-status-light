@@ -43,8 +43,18 @@ mkdir -p secret
 # Run the app once to authenticate.
 python3 app.py --auth_only
 
+# Install a (reliable) network wait systemd gate.
+cp systemd/network-wait-online.service /etc/systemd/system
+systemctl enable network-wait-online.service
+
 # Configure this to run at boot and start it.
 cp systemd/calendar-status-light.service /etc/systemd/system
 systemctl enable calendar-status-light.service
-systemctl start calendar-status-light.service
+
+# Optional: Configure a daily update service.
+cp systemd/calendar-status-light-update.service /etc/systemd/system
+systemctl enable calendar-status-light-update.service
+
+# Reboot to take effect.
+reboot now
 ```

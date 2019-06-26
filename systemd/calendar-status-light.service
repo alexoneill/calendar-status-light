@@ -5,8 +5,6 @@ Description=calendar-status-light Service.
 Type=simple
 ExecStart=/usr/bin/python3 /root/calendar-status-light/app.py
 Environment=PYTHONUNBUFFERED=1
-StandardOutput=syslog+console
-StandardError=syslog+console
 Restart=always
 
 [Install]

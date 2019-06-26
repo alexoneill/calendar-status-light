@@ -1,0 +1,13 @@
+[Unit]
+Description=calendar-status-light Update Service.
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/git -C /root/calendar-status-light pull
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
