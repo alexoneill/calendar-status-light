@@ -1,0 +1,9 @@
+[Unit]
+Description=calendar-status-light Service.
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /root/calendar-status-light/app.py
+
+[Install]
+WantedBy=multi-user.target

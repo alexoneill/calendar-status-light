@@ -1,16 +1,10 @@
 # app.py
 # 2019-06-15
 
-# Get GPIO (which may fail when not running on a RPi).
-# If this fails, prefer to continue without it.
-try:
-  import RPi.GPIO as GPIO
-except RuntimeError:
-  GPIO = None
-
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+import gpiozero
 import pytz
 
 import argparse
@@ -18,6 +12,7 @@ import datetime
 import enum
 import os.path
 import pickle
+import signal
 
 
 # Token storage.
@@ -30,9 +25,9 @@ SCOPES = [
   'https://www.googleapis.com/auth/calendar.settings.readonly',
 ]
 
-# Runtime constants.
-# How often to check (in minutes).
-CHECK_INTERVAL_MINUTES = 5
+# Runtime defaults.
+# How often to check (in seconds).
+CHECK_INTERVAL_SECONDS = 30
 
 # Deduced option for what the calendar status is.
 class CalendarStatus(enum.Enum):
@@ -45,13 +40,11 @@ AWAY_TERMS = ('wfh', 'ooo')
 DAY_START = datetime.timedelta(hours = 10, minutes = 30)
 DAY_END = datetime.timedelta(hours = 18, minutes = 30)
 
-# TODO(me): Fill this in!
-# Map CalendarStatus to output pin.
-OUTPUT_PINS = dict([
-  (CalendarStatus.AWAY, 0),
-  (CalendarStatus.BUSY, 0),
-  (CalendarStatus.FREE, 0),
-])
+# Declare which pins to use.
+AWAY_PIN = "WPI0"
+BUSY_PIN = "WPI1"
+FREE_PIN = "WPI2"
+BUZZ_PIN = "WPI3"
 
 
 # Parse the format for a simple time during the day.
@@ -82,17 +75,17 @@ def parse_args(*args):
   parser = argparse.ArgumentParser(description='Calendar Status Light')
 
   parser.add_argument('--check_interval', type=int,
-                      default=CHECK_INTERVAL_MINUTES,
-                      help='How often to poll the calendar (in minutes)')
+                      default=CHECK_INTERVAL_SECONDS,
+                      help='How often to poll the calendar (in seconds)')
 
-  parser.add_argument('--day_start', type=str, required=True,
+  parser.add_argument('--day_start', type=str, default=DAY_START,
                       action=ParseTimeAction,
                       help='When the day starts, in "hh:mm" format')
-  parser.add_argument('--day_end', type=str, required=True,
+  parser.add_argument('--day_end', type=str, default=DAY_END,
                       action=ParseTimeAction,
                       help='When the day ends, in "hh:mm" format')
 
-  parser.add_argument('--auth_only', type=bool, action='store_true',
+  parser.add_argument('--auth_only', action='store_true',
                       help='Only perform authentication with Google?')
 
   return parser.parse_args()
@@ -137,7 +130,7 @@ def auth(creds):
   return creds
 
 
-def status(cal, check_interval, day_start, day_end):
+def status(cal, check_delta, day_start, day_end):
   # Get the user's timezone.
   tzinfo = cal.settings().get(setting='timezone').execute()
   tz = pytz.timezone(tzinfo.get('value', 'UTC'))
@@ -168,11 +161,10 @@ def status(cal, check_interval, day_start, day_end):
           and 'dateTime' not in event['end']):
         return CalendarStatus.AWAY
 
-  # Query Free / Busy for the next 5m on the primary calendar.
-  delta = datetime.timedelta(minutes=check_interval)
+  # Query Free / Busy for the next check_delta on the primary calendar.
   body = {
       'timeMin': now.isoformat(),
-      'timeMax': (now + delta).isoformat(),
+      'timeMax': (now + check_delta).isoformat(),
       'timeZone': tz.zone,
       'items': [{
         'id': 'primary',
@@ -187,6 +179,11 @@ def status(cal, check_interval, day_start, day_end):
   return CalendarStatus.FREE
 
 
+def stream(fn, *args, **kwargs):
+  while True:
+    yield fn(*args, **kwargs)
+
+
 def main(*args):
   # Parse the arguments.
   args = parse_args(args)
@@ -199,21 +196,31 @@ def main(*args):
   # Create an API client.
   cal = build('calendar', 'v3', credentials=creds)
 
-  # Calculate the status.
-  cal_status = status(cal, args.check_interval, args.day_start, args.day_end)
-  print(cal_status)
+  # Configure the stack.
+  buzz = gpiozero.LED(BUZZ_PIN)
+  stack = gpiozero.LEDBoard(
+      AWAY_PIN,
+      BUSY_PIN,
+      FREE_PIN
+    )
 
-  if (GPIO is not None):
-    # Configure GPIO.
-    GPIO.setmode(GPIO.BOARD)
-    for pin in OUTPUT_PINS.values():
-      GPIO.setup(pin, GPIO.OUT)
+  # Define a mapping between board LEDs and CalendarStatuses.
+  led_mapping = dict([
+      (CalendarStatus.AWAY, (1, 0, 0)),
+      (CalendarStatus.BUSY, (0, 1, 0)),
+      (CalendarStatus.FREE, (0, 0, 1))
+    ])
 
-    # Output the status to the light.
-    for status_key, pin in OUTPUT_PINS.items():
-      GPIO.output(pin, status_key == cal_status)
+  # Configure the stack to update periodically.
+  check_delta = datetime.timedelta(seconds=args.check_interval)
+  stack.source_delay = check_delta.total_seconds()
+  stack.source = (
+      led_mapping[cal_status] for cal_status in
+        stream(status, cal, check_delta, args.day_start, args.day_end))
 
-    GPIO.cleanup()
+  # Wait for a signal, then quit.
+  print('Waiting for signal...')
+  signal.pause()
 
 
 if __name__ == '__main__':

@@ -3,25 +3,48 @@ A light which quickly displays where I might be based on my calendar.
 
 ## Setup
 
+### Local Development
+
+To run this code locally (not on a RPi), use `docker`:
+
+```shell
+docker build -t calendar-status-light .
+
+# Save the Google OAuth2.0 creds somewhere special.
+mkdir -p /tmp/calendar-status-light
+
+# Run the container.
+docker run --rm -it -v /tmp/calendar-status-light:/usr/src/app/secret \
+  calendar-status-light:latest
+```
+
+### RPi Zero W
+
 Do the following to prepare the RPi Zero W:
 
 ```shell
-# Get a version of Docker compatible with the RPi Zero W.
-# https://github.com/moby/moby/issues/38175#issuecomment-437681349
-$ apt-get install docker-ce=18.06.1~ce~3-0~raspbian
-$ systemctl enable docker.service
-$ systemctl start docker.service
+# Authenticate as root.
+sudo su
 
-# Get the Docker local-persist plugin.
-# https://github.com/MatchbookLab/local-persist#running-outside-a-container
-$ curl -fsSL https://raw.githubusercontent.com/CWSpear/local-persist/master/scripts/install.sh \
-  | sudo bash
+# Clone the repo into /root.
+cd /root
+git clone ... calendar-status-light
 
-# Build this container.
-$ docker build -t calendar-status-light .
+# Ensure that python3 is installed.
+apt-get install python3 python3-pip
 
-# Configure this container to run at boot and start it.
-$ cp systemctl/calendar-status-light.service /etc/systemd/system
-$ systemctl enable calendar-status-light.service
-$ systemctl start calendar-status-light.service
+# Install requisite packages.
+export PYTHONWARNINGS="ignore:Unverified HTTPS request"
+pip3 install --trusted-host pypi.python.org -r requirements.txt
+
+# Save the OAuth2.0 creds from Google in ./secret/
+mkdir -p secret
+
+# Run the app once to authenticate.
+python3 app.py --auth_only
+
+# Configure this to run at boot and start it.
+cp systemd/calendar-status-light.service /etc/systemd/system
+systemctl enable calendar-status-light.service
+systemctl start calendar-status-light.service
 ```
