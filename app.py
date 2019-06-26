@@ -92,6 +92,9 @@ def parse_args(*args):
                       action=ParseTimeAction,
                       help='When the day ends, in "hh:mm" format')
 
+  parser.add_argument('--auth-only', type=bool, action='store_true',
+                      help='Only perform authentication with Google?')
+
   return parser.parse_args()
 
 
@@ -188,8 +191,12 @@ def main(*args):
   # Parse the arguments.
   args = parse_args(args)
 
-  # Authenticate and create an API client.
+  # Authenticate and bail early if requested.
   creds = auth()
+  if (args.auth_only):
+    return
+
+  # Create an API client.
   cal = build('calendar', 'v3', credentials=creds)
 
   # Calculate the status.
