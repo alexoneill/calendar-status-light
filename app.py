@@ -4,6 +4,7 @@
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+import dateutil.parser
 import gpiozero
 import pytz
 
@@ -30,7 +31,7 @@ SCOPES = [
 
 # Runtime defaults.
 # How often to check (in seconds).
-CHECK_INTERVAL_SECONDS = 30
+CHECK_INTERVAL_SECONDS = 5
 
 # Deduced option for what the calendar status is.
 class CalendarStatus(enum.Enum):
@@ -39,10 +40,12 @@ class CalendarStatus(enum.Enum):
   FREE = 3
 
 # Terms that indicate away.
-IGNORE_TERMS = ('oncall')
+IGNORE_TERMS = ('oncall',)
 AWAY_TERMS = ('wfh', 'ooo')
 DAY_START = datetime.timedelta(hours = 10, minutes = 30)
 DAY_END = datetime.timedelta(hours = 18, minutes = 30)
+DAY_START = datetime.timedelta()
+DAY_END = datetime.timedelta(hours = 23, minutes = 59)
 
 # Declare which pins to use.
 AWAY_PIN = "WPI0"
@@ -135,9 +138,9 @@ def auth(creds):
 
 
 def parse_event_time(event_time, tzinfo):
-  event_str = (event['date'] if ('date' in event)
-    else event['dateTime'].rstrip('Z'))
-  return datetime.datetime.fromisoformat(event_str).replace(tzinfo = tzinfo)
+  event_str = (event_time['date'] if ('date' in event_time)
+    else event_time['dateTime'])
+  return dateutil.parser.parse(event_str) # .replace(tzinfo = tzinfo)
 
 
 def check_keywords(string, keywords):
@@ -175,32 +178,17 @@ def status(cal, check_delta, day_start, day_end):
     end = parse_event_time(event['end'], tz)
 
     # Skip events out of scope.
-    if (not start_time <= now < end_time):
-      continue
-
-    # Skip events with certain keywords.
-    title = event['summary'].lower()
-    if (check_keywords(title, IGNORE_TERMS)):
+    if (not start <= now < end):
       continue
 
     # Check against away keywords.
+    title = event['summary'].lower()
     if (check_keywords(title, AWAY_TERMS)):
       return CalendarStatus.AWAY
 
-  # Query Free / Busy for the next check_delta on the primary calendar.
-  body = {
-      'timeMin': now.isoformat(),
-      'timeMax': (now + check_delta).isoformat(),
-      'timeZone': tz.zone,
-      'items': [{
-        'id': 'primary',
-      }]
-    }
-  resp = cal.freebusy().query(body = body).execute()
-
-  # If the response contains any items, consider the status to be busy.
-  if (resp.get('calendars', {}).get('primary', {}).get('busy', [])):
-    return CalendarStatus.BUSY
+    # Skip events with certain keywords.
+    if (not check_keywords(title, IGNORE_TERMS)):
+      return CalendarStatus.BUSY
 
   return CalendarStatus.FREE
 
