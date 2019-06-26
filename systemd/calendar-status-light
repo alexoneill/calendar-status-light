@@ -1,0 +1,12 @@
+[Unit]
+Description=calendar-status-light Container
+Requires=docker.service
+After=docker.service
+
+[Service]
+Restart=always
+ExecStart=/usr/bin/docker start -a calendar-status-light:latest
+ExecStop=/usr/bin/docker stop -t 5 calendar-status-light:latest
+
+[Install]
+WantedBy=local.target
