@@ -92,7 +92,7 @@ def parse_args(*args):
                       action=ParseTimeAction,
                       help='When the day ends, in "hh:mm" format')
 
-  parser.add_argument('--auth-only', type=bool, action='store_true',
+  parser.add_argument('--auth_only', type=bool, action='store_true',
                       help='Only perform authentication with Google?')
 
   return parser.parse_args()
