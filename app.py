@@ -39,6 +39,7 @@ class CalendarStatus(enum.Enum):
   FREE = 3
 
 # Terms that indicate away.
+IGNORE_TERMS = ('oncall')
 AWAY_TERMS = ('wfh', 'ooo')
 DAY_START = datetime.timedelta(hours = 10, minutes = 30)
 DAY_END = datetime.timedelta(hours = 18, minutes = 30)
@@ -133,6 +134,19 @@ def auth(creds):
   return creds
 
 
+def parse_event_time(event_time, tzinfo):
+  event_str = (event['date'] if ('date' in event)
+    else event['dateTime'].rstrip('Z'))
+  return datetime.datetime.fromisoformat(event_str).replace(tzinfo = tzinfo)
+
+
+def check_keywords(string, keywords):
+  for keyword in keywords:
+    if (keyword in string):
+      return True
+  return False
+
+
 def status(cal, check_delta, day_start, day_end):
   # Get the user's timezone.
   tzinfo = cal.settings().get(setting='timezone').execute()
@@ -156,13 +170,22 @@ def status(cal, check_delta, day_start, day_end):
     }
   resp = cal.events().list(**body).execute()
   for event in resp['items']:
-    for term in AWAY_TERMS:
-      if (term in event['summary'].lower()
-          and 'date' in event['start']
-          and 'dateTime' not in event['start']
-          and 'date' in event['end']
-          and 'dateTime' not in event['end']):
-        return CalendarStatus.AWAY
+    # Parse event times.
+    start = parse_event_time(event['start'], tz)
+    end = parse_event_time(event['end'], tz)
+
+    # Skip events out of scope.
+    if (not start_time <= now < end_time):
+      continue
+
+    # Skip events with certain keywords.
+    title = event['summary'].lower()
+    if (check_keywords(title, IGNORE_TERMS)):
+      continue
+
+    # Check against away keywords.
+    if (check_keywords(title, AWAY_TERMS)):
+      return CalendarStatus.AWAY
 
   # Query Free / Busy for the next check_delta on the primary calendar.
   body = {
@@ -184,6 +207,8 @@ def status(cal, check_delta, day_start, day_end):
 
 def stream(fn, *args, **kwargs):
   while True:
+    val = fn(*args, **kwargs)
+    print('stream (%s): %s' % (fn.__name__, val))
     yield fn(*args, **kwargs)
 
 

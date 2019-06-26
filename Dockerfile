@@ -27,6 +27,9 @@ EXPOSE 80 8080
 # Copy everything from here to the container.
 COPY app.py .
 
+# Not running on an RPi, use mock out gpiozero.
+ENV GPIOZERO_PIN_FACTORY mock
+
 # Start the application.
 ENTRYPOINT ["python3", "app.py"]
 CMD []
