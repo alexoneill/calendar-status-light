@@ -153,6 +153,38 @@ def check_keywords(string, keywords):
   return False
 
 
+def process_event(event, now, tz):
+  # Default status to FREE, let the below modify it.
+  cal_status = CalendarStatus.FREE
+
+  # Skip unconfirmed events.
+  if (event['status'] != 'confirmed'):
+    return cal_status
+
+  # Parse event times.
+  start = parse_event_time(event['start'], tz)
+  end = parse_event_time(event['end'], tz)
+
+  # Skip events out of scope.
+  if (not start <= now < end):
+    return cal_status
+
+  # Ignore events that have been declined or have not been responded to.
+  for attendee in event.get('attendees', []):
+    if (attendee.get('self', False) and attendee['responseStatus'] in ('declined', 'needsAction')):
+      return cal_status
+
+  # Check against away keywords.
+  title = event['summary'].lower()
+  if (check_keywords(title, AWAY_TERMS)):
+    cal_status = max(cal_status, CalendarStatus.AWAY)
+
+  # Skip events with certain keywords.
+  if (not check_keywords(title, IGNORE_TERMS)):
+    cal_status = max(cal_status, CalendarStatus.BUSY)
+  return cal_status
+
+
 def status(cal, check_delta, day_start, day_end):
   # Get the user's timezone.
   tzinfo = cal.settings().get(setting='timezone').execute()
@@ -177,22 +209,7 @@ def status(cal, check_delta, day_start, day_end):
     }
   resp = cal.events().list(**body).execute()
   for event in resp['items']:
-    # Parse event times.
-    start = parse_event_time(event['start'], tz)
-    end = parse_event_time(event['end'], tz)
-
-    # Skip events out of scope.
-    if (not start <= now < end):
-      continue
-
-    # Check against away keywords.
-    title = event['summary'].lower()
-    if (check_keywords(title, AWAY_TERMS)):
-      cal_status = max(cal_status, CalendarStatus.AWAY)
-
-    # Skip events with certain keywords.
-    if (not check_keywords(title, IGNORE_TERMS)):
-      cal_status = max(cal_status, CalendarStatus.BUSY)
+    cal_status = max(cal_status, process_event(event, now, tz))
 
   return cal_status
 
