@@ -157,6 +157,10 @@ def process_event(event, now, tz):
   # Default status to FREE, let the below modify it.
   cal_status = CalendarStatus.FREE
 
+  # Skip cancelled events.
+  if (event['status'] == 'cancelled'):
+    return cal_status
+
   # Skip unconfirmed events.
   if (event['status'] != 'confirmed'):
     return cal_status
