@@ -13,6 +13,7 @@ import datetime
 import enum
 import os.path
 import pickle
+import re
 import signal
 
 # Directory where the script is.
@@ -43,6 +44,7 @@ class CalendarStatus(enum.IntEnum):
 # Terms that indicate away.
 IGNORE_TERMS = ('oncall',)
 AWAY_TERMS = ('wfh', 'ooo')
+OVERRIDE_REGEX = re.compile(r'#calendar-status-light: ?(FREE|BUSY|AWAY)')
 DAY_START = datetime.timedelta(hours=10, minutes=30)
 DAY_END = datetime.timedelta(hours=18, minutes=30)
 DAY_START = datetime.timedelta()
@@ -170,7 +172,26 @@ def check_keywords(string, keywords):
   return False
 
 
+def check_event_override(event):
+  # Find the override text in the description.
+  m = OVERRIDE_REGEX.search(event['description'])
+  if m is None:
+    return None
+
+  # Match the name to the enum name.
+  for status in CalendarStatus:
+    if status.name == m.group(0):
+      return status
+
+  # Otherwise give up.
+  return None
+
+
 def process_event(event, now, tz):
+  # Respect overrides above all else.
+  if (status := check_event_override(event)) is not None:
+    return status
+
   # Default status to FREE, let the below modify it.
   cal_status = CalendarStatus.FREE
 
