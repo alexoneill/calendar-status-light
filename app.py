@@ -160,7 +160,7 @@ def auth(creds):
 def parse_event_time(event_time, tzinfo):
   event_str = (event_time['date'] if
                ('date' in event_time) else event_time['dateTime'])
-  return dateutil.parser.parse(event_str)  # .replace(tzinfo = tzinfo)
+  return dateutil.parser.parse(event_str).replace(tzinfo=tzinfo)
 
 
 def check_keywords(string, keywords):
