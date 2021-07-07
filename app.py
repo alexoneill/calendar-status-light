@@ -15,7 +15,6 @@ import os.path
 import pickle
 import signal
 
-
 # Directory where the script is.
 DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -25,13 +24,14 @@ TOKEN = os.path.join(DIR, 'secret/token.pkl')
 # Required Google Calendar authentication constants.
 CREDS = os.path.join(DIR, 'secret/credentials.json')
 SCOPES = [
-  'https://www.googleapis.com/auth/calendar.readonly',
-  'https://www.googleapis.com/auth/calendar.settings.readonly',
+    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/calendar.settings.readonly',
 ]
 
 # Runtime defaults.
 # How often to check (in seconds).
 CHECK_INTERVAL_SECONDS = 5
+
 
 # Deduced option for what the calendar status is.
 class CalendarStatus(enum.IntEnum):
@@ -39,13 +39,14 @@ class CalendarStatus(enum.IntEnum):
   BUSY = 2
   AWAY = 3
 
+
 # Terms that indicate away.
 IGNORE_TERMS = ('oncall',)
 AWAY_TERMS = ('wfh', 'ooo')
-DAY_START = datetime.timedelta(hours = 10, minutes = 30)
-DAY_END = datetime.timedelta(hours = 18, minutes = 30)
+DAY_START = datetime.timedelta(hours=10, minutes=30)
+DAY_END = datetime.timedelta(hours=18, minutes=30)
 DAY_START = datetime.timedelta()
-DAY_END = datetime.timedelta(hours = 23, minutes = 59)
+DAY_END = datetime.timedelta(hours=23, minutes=59)
 
 # Declare which pins to use.
 AWAY_PIN = "WPI0"
@@ -60,7 +61,8 @@ BEEP_TIME = 0.2
 # Parse the format for a simple time during the day.
 # This converts '12:34' -> timedelta(hours = 12, minutes = 34)
 class ParseTimeAction(argparse.Action):
-  def __call__(self, parser, namespace, string, option_string = None):
+
+  def __call__(self, parser, namespace, string, option_string=None):
     # Check there are only two components.
     parts = [part.strip() for part in string.split(':')]
     if (len(parts) != 2):
@@ -76,7 +78,7 @@ class ParseTimeAction(argparse.Action):
       raise ValueError("Time encodes incorrect offset: %s" % string)
 
     # Store the value in a useable format.
-    value = datetime.timedelta(hours = hours, minutes = minutes)
+    value = datetime.timedelta(hours=hours, minutes=minutes)
     setattr(namespace, self.dest, value)
 
 
@@ -84,18 +86,24 @@ class ParseTimeAction(argparse.Action):
 def parse_args(*args):
   parser = argparse.ArgumentParser(description='Calendar Status Light')
 
-  parser.add_argument('--check_interval', type=int,
+  parser.add_argument('--check_interval',
+                      type=int,
                       default=CHECK_INTERVAL_SECONDS,
                       help='How often to poll the calendar (in seconds)')
 
-  parser.add_argument('--day_start', type=str, default=DAY_START,
+  parser.add_argument('--day_start',
+                      type=str,
+                      default=DAY_START,
                       action=ParseTimeAction,
                       help='When the day starts, in "hh:mm" format')
-  parser.add_argument('--day_end', type=str, default=DAY_END,
+  parser.add_argument('--day_end',
+                      type=str,
+                      default=DAY_END,
                       action=ParseTimeAction,
                       help='When the day ends, in "hh:mm" format')
 
-  parser.add_argument('--auth_only', action='store_true',
+  parser.add_argument('--auth_only',
+                      action='store_true',
                       help='Only perform authentication with Google?')
 
   return parser.parse_args()
@@ -103,7 +111,9 @@ def parse_args(*args):
 
 # Decorator to wrap a function in object storage (at a given file path).
 def pickled(file_path):
+
   def decorator(func):
+
     def wrapped(*args, **kwargs):
       # Load the object from the file.
       obj = None
@@ -122,6 +132,7 @@ def pickled(file_path):
       return obj
 
     return wrapped
+
   return decorator
 
 
@@ -141,9 +152,9 @@ def auth(creds):
 
 
 def parse_event_time(event_time, tzinfo):
-  event_str = (event_time['date'] if ('date' in event_time)
-    else event_time['dateTime'])
-  return dateutil.parser.parse(event_str) # .replace(tzinfo = tzinfo)
+  event_str = (event_time['date'] if
+               ('date' in event_time) else event_time['dateTime'])
+  return dateutil.parser.parse(event_str)  # .replace(tzinfo = tzinfo)
 
 
 def check_keywords(string, keywords):
@@ -175,7 +186,8 @@ def process_event(event, now, tz):
 
   # Ignore events that have been declined or have not been responded to.
   for attendee in event.get('attendees', []):
-    if (attendee.get('self', False) and attendee['responseStatus'] in ('declined', 'needsAction')):
+    if (attendee.get('self', False) and
+        attendee['responseStatus'] in ('declined', 'needsAction')):
       return cal_status
 
   # Check against away keywords.
@@ -195,8 +207,8 @@ def status(cal, check_delta, day_start, day_end):
   tz = pytz.timezone(tzinfo.get('value', 'UTC'))
 
   # Determine when it is based on the timezone.
-  now = datetime.datetime.now(tz = tz)
-  today = now.replace(hour = 0, minute = 0, second = 0, microsecond = 0)
+  now = datetime.datetime.now(tz=tz)
+  today = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
   # Check that the current time is between the given bounds.
   if (now < today + day_start or today + day_end < now):
@@ -210,7 +222,7 @@ def status(cal, check_delta, day_start, day_end):
       'timeMin': today.isoformat(),
       'timeMax': (today + delta).isoformat(),
       'timeZone': tz.zone,
-    }
+  }
   resp = cal.events().list(**body).execute()
   for event in resp['items']:
     cal_status = max(cal_status, process_event(event, now, tz))
@@ -239,28 +251,21 @@ def main(*args):
 
   # Configure the stack.
   buzz = gpiozero.Buzzer(BUZZ_PIN)
-  stack = gpiozero.LEDBoard(
-      AWAY_PIN,
-      BUSY_PIN,
-      FREE_PIN
-    )
+  stack = gpiozero.LEDBoard(AWAY_PIN, BUSY_PIN, FREE_PIN)
 
   # Define a mapping between board LEDs and CalendarStatuses.
-  led_mapping = dict([
-      (CalendarStatus.AWAY, (1, 0, 0)),
-      (CalendarStatus.BUSY, (0, 1, 0)),
-      (CalendarStatus.FREE, (0, 0, 1))
-    ])
+  led_mapping = dict([(CalendarStatus.AWAY, (1, 0, 0)),
+                      (CalendarStatus.BUSY, (0, 1, 0)),
+                      (CalendarStatus.FREE, (0, 0, 1))])
 
   # Configure the stack to update periodically.
   check_delta = datetime.timedelta(seconds=args.check_interval)
   stack.source_delay = check_delta.total_seconds()
-  stack.source = (
-      led_mapping[cal_status] for cal_status in
-        stream(status, cal, check_delta, args.day_start, args.day_end))
+  stack.source = (led_mapping[cal_status] for cal_status in stream(
+      status, cal, check_delta, args.day_start, args.day_end))
 
   # Beep the buzzer once to indicate boot.
-  buzz.beep(on_time = BEEP_TIME, n = 1)
+  buzz.beep(on_time=BEEP_TIME, n=1)
 
   # Wait for a signal, then quit.
   print('Waiting for signal...')
