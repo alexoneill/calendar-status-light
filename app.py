@@ -252,7 +252,10 @@ def status(cal, check_delta, day_start, day_end):
   }
   resp = cal.events().list(**body).execute()
   for event in resp['items']:
-    cal_status = max(cal_status, process_event(event, now, tz))
+    status = process_event(event, now, tz)
+    if cal_status < status:
+      print(f'{event["summary"]} -> {status}')
+      cal_status = status
 
   return cal_status
 
