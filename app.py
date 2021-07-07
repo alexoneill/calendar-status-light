@@ -146,7 +146,13 @@ def auth(creds):
     else:
       # Otherwise generate a creds.
       flow = InstalledAppFlow.from_client_secrets_file(CREDS, SCOPES)
-      creds = flow.run_console()
+      creds = flow.run_console(
+          # Enable offline access so that you can refresh an access token
+          # without re-prompting the user for permission. Recommended for web
+          # server apps.
+          access_type='offline',
+          # Enable incremental authorization. Recommended as a best practice.
+          include_granted_scopes='true')
 
   return creds
 
