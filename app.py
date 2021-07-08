@@ -203,11 +203,6 @@ def process_event(event, now, tz):
   start = dateutil.parser.parse(event['start']['dateTime'])
   end = dateutil.parser.parse(event['end']['dateTime'])
 
-  # Special case recurrent events.
-  if event.get("recurrence", False):
-    start = start.replace(year=now.year, month=now.month, day=now.day)
-    end = end.replace(year=now.year, month=now.month, day=now.day)
-
   # Skip events out of scope.
   if (not (start <= now < end)):
     return CalendarStatus.FREE
@@ -254,6 +249,7 @@ def status(cal, check_delta, day_start, day_end):
       'timeMin': today.isoformat(),
       'timeMax': (today + delta).isoformat(),
       'timeZone': tz.zone,
+      'singleEvents': True,
   }
   resp = cal.events().list(**body).execute()
   for event in resp['items']:
