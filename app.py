@@ -265,7 +265,7 @@ def stream(fn, *args, **kwargs):
   while True:
     val = fn(*args, **kwargs)
     print('stream (%s): %s' % (fn.__name__, val))
-    yield fn(*args, **kwargs)
+    yield val
 
 
 def main(*args):
