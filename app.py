@@ -5,13 +5,12 @@ from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 import dateutil.parser
-import gpiozero
 import pytz
 
 import argparse
 import datetime
 import enum
-import os.path
+import os
 import pickle
 import re
 import signal
@@ -107,6 +106,11 @@ def parse_args(*args):
   parser.add_argument('--auth_only',
                       action='store_true',
                       help='Only perform authentication with Google?')
+
+  parser.add_argument('--mock_light',
+                      action='store_true',
+                      help='Do not expect to connect to the light, use a fake'
+                           'light. Useful for local development')
 
   return parser.parse_args()
 
@@ -280,7 +284,12 @@ def main(*args):
   # Create an API client.
   cal = build('calendar', 'v3', credentials=creds)
 
+  # Optionally mock out the lights.
+  if args.mock_light:
+    os.environ['GPIOZERO_PIN_FACTORY'] = 'mock'
+
   # Configure the stack.
+  import gpiozero
   buzz = gpiozero.Buzzer(BUZZ_PIN)
   stack = gpiozero.LEDBoard(AWAY_PIN, BUSY_PIN, FREE_PIN)
 
