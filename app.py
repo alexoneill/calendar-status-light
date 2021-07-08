@@ -159,12 +159,6 @@ def auth(creds):
   return creds
 
 
-def parse_event_time(event_time, tzinfo):
-  event_str = (event_time['date'] if
-               ('date' in event_time) else event_time['dateTime'])
-  return dateutil.parser.parse(event_str).replace(tzinfo=tzinfo)
-
-
 def check_keywords(string, keywords):
   for keyword in keywords:
     if (keyword in string):
@@ -174,13 +168,13 @@ def check_keywords(string, keywords):
 
 def check_event_override(event):
   # Find the override text in the description.
-  m = OVERRIDE_REGEX.search(event['description'])
+  m = OVERRIDE_REGEX.search(event.get('description', ''))
   if m is None:
     return None
 
   # Match the name to the enum name.
   for status in CalendarStatus:
-    if status.name == m.group(0):
+    if status.name == m.group(1):
       return status
 
   # Otherwise give up.
@@ -189,33 +183,43 @@ def check_event_override(event):
 
 def process_event(event, now, tz):
   # Respect overrides above all else.
-  if (status := check_event_override(event)) is not None:
+  status = check_event_override(event)
+  if status is not None:
     return status
-
-  # Default status to FREE, let the below modify it.
-  cal_status = CalendarStatus.FREE
 
   # Skip cancelled events.
   if (event['status'] == 'cancelled'):
-    return cal_status
+    return CalendarStatus.FREE
 
   # Skip unconfirmed events.
   if (event['status'] != 'confirmed'):
-    return cal_status
+    return CalendarStatus.FREE
+
+  # Skip all day events.
+  if event['start'].get('date', False):
+    return CalendarStatus.FREE
 
   # Parse event times.
-  start = parse_event_time(event['start'], tz)
-  end = parse_event_time(event['end'], tz)
+  start = dateutil.parser.parse(event['start']['dateTime'])
+  end = dateutil.parser.parse(event['end']['dateTime'])
+
+  # Special case recurrent events.
+  if event.get("recurrence", False):
+    start = start.replace(year=now.year, month=now.month, day=now.day)
+    end = end.replace(year=now.year, month=now.month, day=now.day)
 
   # Skip events out of scope.
-  if (not start <= now < end):
-    return cal_status
+  if (not (start <= now < end)):
+    return CalendarStatus.FREE
 
   # Ignore events that have been declined or have not been responded to.
   for attendee in event.get('attendees', []):
     if (attendee.get('self', False) and
         attendee['responseStatus'] in ('declined', 'needsAction')):
-      return cal_status
+      return CalendarStatus.FREE
+
+  # Default status to FREE, let the below modify it.
+  cal_status = CalendarStatus.FREE
 
   # Check against away keywords.
   title = event['summary'].lower()
@@ -225,6 +229,7 @@ def process_event(event, now, tz):
   # Skip events with certain keywords.
   if (not check_keywords(title, IGNORE_TERMS)):
     cal_status = max(cal_status, CalendarStatus.BUSY)
+
   return cal_status
 
 
@@ -254,7 +259,7 @@ def status(cal, check_delta, day_start, day_end):
   for event in resp['items']:
     status = process_event(event, now, tz)
     if cal_status < status:
-      print(f'{event["summary"]} -> {status}')
+      print(f'{event.get("summary", "N/A")} -> {status}')
       cal_status = status
 
   return cal_status
