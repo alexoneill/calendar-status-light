@@ -5,17 +5,10 @@ A light which quickly displays where I might be based on my calendar.
 
 ### Local Development
 
-To run this code locally (not on a RPi), use `docker`:
+To run this code locally (not on a RPi):
 
 ```shell
-docker build -t calendar-status-light .
-
-# Save the Google OAuth2.0 creds somewhere special.
-mkdir -p /tmp/calendar-status-light
-
-# Run the container.
-docker run --rm -it -v /tmp/calendar-status-light:/usr/src/app/secret \
-  calendar-status-light:latest
+python3 app --mock_light
 ```
 
 ### RPi Zero W
@@ -55,6 +48,6 @@ systemctl enable calendar-status-light.service
 cp systemd/calendar-status-light-update.service /etc/systemd/system
 systemctl enable calendar-status-light-update.service
 
-# Reboot to take effect.
-reboot now
+# Start everything.
+systemctl start calendar-status-light.service
 ```
