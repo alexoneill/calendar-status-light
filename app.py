@@ -187,7 +187,7 @@ def check_event_override(event):
   return None
 
 
-def process_event(event, now, tz):
+def process_event(event, now):
   # Respect overrides above all else.
   status = check_event_override(event)
   if status is not None:
@@ -264,8 +264,8 @@ def status(cal, check_delta, day_start, day_end):
   }
   resp = cal.events().list(**body).execute()
   for event in resp['items']:
-    status = max(process_event(event, now, tz),
-                 process_event(event, now + LOOK_AHEAD, tz))
+    status = max(process_event(event, now),
+                 process_event(event, now + LOOK_AHEAD))
     if cal_status < status:
       print(f'{event.get("summary", "")} -> {status}')
       cal_status = status
