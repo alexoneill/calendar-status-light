@@ -35,6 +35,7 @@ CHECK_INTERVAL_SECONDS = 5
 
 # Deduced option for what the calendar status is.
 class CalendarStatus(enum.IntEnum):
+  OFF = 0
   FREE = 1
   BUSY = 2
   AWAY = 3
@@ -44,10 +45,9 @@ class CalendarStatus(enum.IntEnum):
 IGNORE_TERMS = ('oncall',)
 AWAY_TERMS = ('wfh', 'ooo')
 OVERRIDE_REGEX = re.compile(r'#calendar-status-light: ?(FREE|BUSY|AWAY)')
-DAY_START = datetime.timedelta(hours=10, minutes=30)
-DAY_END = datetime.timedelta(hours=18, minutes=30)
-DAY_START = datetime.timedelta()
-DAY_END = datetime.timedelta(hours=23, minutes=59)
+DAY_START = datetime.timedelta(hours=9, minutes=0)
+DAY_END = datetime.timedelta(hours=19, minutes=0)
+OFF_BUFFER = datetime.timedelta(hours=1)
 
 # Declare which pins to use.
 AWAY_PIN = "WPI0"
@@ -110,7 +110,7 @@ def parse_args(*args):
   parser.add_argument('--mock_light',
                       action='store_true',
                       help='Do not expect to connect to the light, use a fake'
-                           'light. Useful for local development')
+                      'light. Useful for local development')
 
   return parser.parse_args()
 
@@ -241,6 +241,11 @@ def status(cal, check_delta, day_start, day_end):
   now = datetime.datetime.now(tz=tz)
   today = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
+  # Turn off the light out of hours.
+  if (now < today + day_start - OFF_BUFFER or
+      today + day_end + OFF_BUFFER < now):
+    return CalendarStatus.OFF
+
   # Check that the current time is between the given bounds.
   if (now < today + day_start or today + day_end < now):
     return CalendarStatus.AWAY
@@ -294,7 +299,8 @@ def main(*args):
   stack = gpiozero.LEDBoard(AWAY_PIN, BUSY_PIN, FREE_PIN)
 
   # Define a mapping between board LEDs and CalendarStatuses.
-  led_mapping = dict([(CalendarStatus.AWAY, (1, 0, 0)),
+  led_mapping = dict([(CalendarStatus.OFF, (0, 0, 0)),
+                      (CalendarStatus.AWAY, (1, 0, 0)),
                       (CalendarStatus.BUSY, (0, 1, 0)),
                       (CalendarStatus.FREE, (0, 0, 1))])
 
