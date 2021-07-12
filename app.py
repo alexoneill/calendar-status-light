@@ -217,7 +217,7 @@ def process_event(event, now, tz):
   cal_status = CalendarStatus.FREE
 
   # Check against away keywords.
-  title = event['summary'].lower()
+  title = event.get('summary', '').lower()
   if (check_keywords(title, AWAY_TERMS)):
     cal_status = max(cal_status, CalendarStatus.AWAY)
 
@@ -255,7 +255,7 @@ def status(cal, check_delta, day_start, day_end):
   for event in resp['items']:
     status = process_event(event, now, tz)
     if cal_status < status:
-      print(f'{event.get("summary", "N/A")} -> {status}')
+      print(f'{event.get("summary", "")} -> {status}')
       cal_status = status
 
   return cal_status
