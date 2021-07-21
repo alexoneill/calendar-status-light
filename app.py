@@ -14,6 +14,7 @@ import os
 import pickle
 import re
 import signal
+import traceback
 
 # Directory where the script is.
 DIR = os.path.dirname(os.path.realpath(__file__))
@@ -275,9 +276,16 @@ def status(cal, check_delta, day_start, day_end):
 
 def stream(fn, *args, **kwargs):
   while True:
-    val = fn(*args, **kwargs)
-    print('stream (%s): %s' % (fn.__name__, val))
-    yield val
+    try:
+      val = fn(*args, **kwargs)
+      print('stream (%s): %s' % (fn.__name__, val))
+      yield val
+    # Fallback to off if there was an exception.
+    except Exception as e:
+      print('stream (%s): threw: %s' % (fn.__name__, e))
+      traceback.print_exc()
+
+      yield CalendarStatus.OFF
 
 
 def main(*args):
